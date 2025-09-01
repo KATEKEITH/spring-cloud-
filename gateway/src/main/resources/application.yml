@@ -1,0 +1,44 @@
+server:
+  port: 8080
+
+spring:
+  application:
+    name: gateway
+
+  redis:
+    host: localhost
+    port: 6379
+    # password: yourpassword  # 필요 시 설정
+    # cluster:
+    #   nodes: host1:6379,host2:6379  # Redis 클러스터일 경우
+
+  cloud:
+    gateway:
+      routes:
+        - id: item-api
+          uri: http://localhost:8081   # 실제 서비스 주소
+          predicates:
+            - Path=/api/items/**
+          filters:
+            # 
+            - name: RequestRateLimiter
+              args:
+                key-resolver: "#{@apiKeyResolver}"         # KeyResolver Bean 이름
+                redis-rate-limiter.replenishRate: 100      # 초당 토큰 보충량: 매초 채워질 토큰 수 -> 100이면 평균 초당 100건 처리 여력
+                redis-rate-limiter.burstCapacity: 200      # 버스트 최대치: 버킷 최대 토큰 수 -> 순간적으로 저장 가능한 최대치 (버스트 허용량)
+                redis-rate-limiter.requestedTokens: 1      # 요청당 소비 토큰 수
+            # 
+            - name: CircuitBreaker
+              args:
+                name: itemCb
+                fallbackUri: forward:/fallback
+
+      default-filters:
+        - name: RemoveRequestHeader
+          args:
+            name: Cookie
+
+      filter:
+        request-rate-limiter:
+          deny-empty-key: true     # 키 없으면 차단
+          include-headers: true    # X-RateLimit-* 헤더 응답 포함
